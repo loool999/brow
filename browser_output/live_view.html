@@ -1,0 +1,176 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Browser Live View</title>
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 0;
+                    background-color: #f0f0f0;
+                }
+                .header {
+                    background-color: #e0e0e0;
+                    padding: 10px 20px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                h1 { 
+                    color: #333; 
+                    margin: 0;
+                }
+                .control-panel {
+                    padding: 10px 20px;
+                    background-color: #ddd;
+                }
+                .scroll-buttons {
+                    margin-top: 10px;
+                }
+                .view-options {
+                    margin-top: 10px;
+                    display: flex;
+                    gap: 10px;
+                }
+                .content-frame {
+                    width: 100%;
+                    border: none;
+                    height: calc(100vh - 150px);
+                    background-color: white;
+                }
+                .info-bar {
+                    background-color: #f8f8f8;
+                    padding: 5px 20px;
+                    border-bottom: 1px solid #ddd;
+                    display: flex;
+                    justify-content: space-between;
+                }
+                .current-url {
+                    font-weight: bold;
+                    max-width: 80%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .timestamp {
+                    color: #666;
+                    font-size: 0.9em;
+                }
+                .refresh-note {
+                    color: #666;
+                    font-size: 0.9em;
+                    padding: 5px 20px;
+                    text-align: center;
+                }
+                .auto-refresh {
+                    color: green;
+                    font-weight: bold;
+                }
+                button {
+                    padding: 5px 10px;
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 3px;
+                    cursor: pointer;
+                }
+                button:hover {
+                    background-color: #45a049;
+                }
+                input[type="text"] {
+                    padding: 5px;
+                    width: 300px;
+                }
+            </style>
+            <script>
+                function refreshFrame() {
+                    fetch('/live_page_info.json?t=' + new Date().getTime())
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('current-url').textContent = data.url;
+                            document.getElementById('current-timestamp').textContent = data.timestamp;
+                            document.getElementById('page-title').textContent = data.title || 'Browser Live View';
+                            
+                            // Refresh the iframe without adding to history
+                            const iframe = document.getElementById('content-frame');
+                            const displayMode = document.querySelector('input[name="display-mode"]:checked').value;
+                            
+                            if (displayMode === 'iframe') {
+                                iframe.src = '/raw_content?t=' + new Date().getTime();
+                            } else {
+                                iframe.src = data.url;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching page info:', error);
+                        });
+                }
+                
+                setInterval(refreshFrame, 500);
+
+                function handleClick(event) {
+                    const iframe = document.getElementById('content-frame');
+                    const rect = iframe.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    fetch(`/click?x=${x}&y=${y}`);
+                }
+
+                function scroll(direction, amount) {
+                    fetch(`/scroll?direction=${direction}&amount=${amount}`);
+                }
+
+                document.addEventListener('keydown', function(event) {
+                    const key = event.key;
+                    fetch(`/type?key=${encodeURIComponent(key)}`);
+                });
+                
+                function changeDisplayMode() {
+                    refreshFrame();
+                }
+            </script>
+        </head>
+        <body>
+            <div class="header">
+                <h1 id="page-title">Browser Live View</h1>
+            </div>
+            
+            <div class="control-panel">
+                <form action="/navigate" method="get">
+                    <input type="text" name="url" placeholder="Enter URL">
+                    <button type="submit">Go</button>
+                </form>
+                <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
+                <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
+                
+                <div class="scroll-buttons">
+                    <button onclick="scroll('up', 100)">Scroll Up</button>
+                    <button onclick="scroll('down', 100)">Scroll Down</button>
+                </div>
+                
+                <div class="view-options">
+                    <label>
+                        <input type="radio" name="display-mode" value="iframe" checked onchange="changeDisplayMode()">
+                        Show direct HTML output
+                    </label>
+                    <label>
+                        <input type="radio" name="display-mode" value="url" onchange="changeDisplayMode()">
+                        Show actual page (may not work for all sites)
+                    </label>
+                </div>
+            </div>
+            
+            <div class="info-bar">
+                <div class="current-url" id="current-url"></div>
+                <div class="timestamp" id="current-timestamp"></div>
+            </div>
+            
+            <iframe id="content-frame" class="content-frame" src="/raw_content"></iframe>
+            
+            <p class="refresh-note">
+                <span class="auto-refresh">Auto-refreshing</span> every 500ms
+            </p>
+        </body>
+        </html>
+        
