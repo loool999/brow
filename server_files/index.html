@@ -1,64 +1,64 @@
 
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; text-align: center; }
-            h1 { color: #333; padding: 20px; margin: 0; background-color: #e0e0e0; }
-            .control-panel { margin: 20px auto; text-align: center; }
-            .scroll-buttons { margin-top: 10px; }
-            .browser-view { margin: 20px auto; max-width: 95%; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-            .browser-view img { width: 100%; border: 1px solid #ddd; }
-        </style>
-        <script>
-            function handleClick(event) {
-                const img = document.getElementById('stream-image');
-                const rect = img.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-                const scaleX = img.naturalWidth / rect.width;
-                const scaleY = img.naturalHeight / rect.height;
-                const actualX = Math.round(x * scaleX);
-                const actualY = Math.round(y * scaleY);
-                fetch(`/click?x=${actualX}&y=${actualY}`);
-            }
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; text-align: center; }
+                h1 { color: #333; padding: 20px; margin: 0; background-color: #e0e0e0; }
+                .control-panel { margin: 20px auto; text-align: center; }
+                .scroll-buttons { margin-top: 10px; }
+                .browser-view { margin: 20px auto; max-width: 95%; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                .browser-view img { width: 100%; border: 1px solid #ddd; }
+            </style>
+            <script>
+                function handleClick(event) {
+                    const img = document.getElementById('stream-image');
+                    const rect = img.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    const scaleX = img.naturalWidth / rect.width;
+                    const scaleY = img.naturalHeight / rect.height;
+                    const actualX = Math.round(x * scaleX);
+                    const actualY = Math.round(y * scaleY);
+                    fetch(`/click?x=${actualX}&y=${actualY}`);
+                }
 
-            function scroll(direction, amount) {
-                fetch(`/scroll?direction=${direction}&amount=${amount}`);
-            }
+                function scroll(direction, amount) {
+                    fetch(`/scroll?direction=${direction}&amount=${amount}`);
+                }
 
-            document.addEventListener('keydown', function(event) {
-                event.preventDefault();
-                const key = event.key;
-                const modifiers = {
-                    ctrl: event.ctrlKey,
-                    shift: event.shiftKey,
-                    alt: event.altKey
-                };
-                fetch(`/type?key=${encodeURIComponent(key)}&modifiers=${encodeURIComponent(JSON.stringify(modifiers))}`);
-            });
+                document.addEventListener('keydown', function(event) {
+                    event.preventDefault();
+                    const key = event.key;
+                    const modifiers = {
+                        ctrl: event.ctrlKey,
+                        shift: event.shiftKey,
+                        alt: event.altKey
+                    };
+                    fetch(`/type?key=${encodeURIComponent(key)}&modifiers=${encodeURIComponent(JSON.stringify(modifiers))}`);
+                });
 
-            document.addEventListener('wheel', function(event) {
-                event.preventDefault();
-                const direction = event.deltaY > 0 ? 'down' : 'up';
-                const amount = Math.abs(event.deltaY);
-                scroll(direction, amount);
-            });
+                document.addEventListener('wheel', function(event) {
+                    event.preventDefault();
+                    const direction = event.deltaY > 0 ? 'down' : 'up';
+                    const amount = Math.abs(event.deltaY);
+                    scroll(direction, amount);
+                });
 
-            document.addEventListener('DOMContentLoaded', function() {
-                const img = document.getElementById('stream-image');
-                img.addEventListener('click', handleClick);
-            });
-        </script>
-    </head>
-    <body>
-        <div class="control-panel">
-            <form action="/navigate" method="get">
-                <input type="text" name="url" placeholder="Enter URL" style="width: 300px;">
-                <button type="submit">Go</button>
-            </form>
-            <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
-            <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const img = document.getElementById('stream-image');
+                    img.addEventListener('click', handleClick);
+                });
+            </script>
+        </head>
+        <body>
+            <div class="control-panel">
+                <form action="/navigate" method="get">
+                    <input type="text" name="url" placeholder="Enter URL" style="width: 300px;">
+                    <button type="submit">Go</button>
+                </form>
+                <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
+                <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
             </div>
             <div class="browser-view">
                 <img id="stream-image" src="/stream" alt="Browser Stream View">
