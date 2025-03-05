@@ -7,21 +7,26 @@ import socketserver
 import queue
 import urllib.parse
 import json
-from PyQt5.QtWebEngineWidgets import QWebEngineProfile
-from PyQt5.QtWebEngineCore import QWebEngineHttpRequest 
-#QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+import getpass
 from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar, 
                              QLineEdit, QPushButton, QAction, QVBoxLayout, 
                              QWidget, QTabWidget, QStatusBar)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QKeySequence, QPixmap, QImage
-QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-import socketserver
-import os
-os.environ["QT_QPA_PLATFORM"] = "offscreen"  # For headless environments
-import getpass
+
+# Set environment variables for headless operation
+os.environ["QT_QPA_PLATFORM"] = "offscreen"  # Use offscreen rendering
 os.environ["XDG_RUNTIME_DIR"] = f"/tmp/runtime-{getpass.getuser()}"
+os.environ["QTWEBENGINE_DISABLE_GPU"] = "1"  # Disable GPU acceleration
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = ""  # Avoid plugin issues
+os.environ["QML_DISABLE_DISK_CACHE"] = "1"  # Disable QML disk cache
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --no-sandbox"  # Additional Chromium flags
+
+# Optional: Specify a font directory with fonts (e.g., DejaVu fonts)
+# If you have fonts available, uncomment and adjust the path:
+# os.environ["QT_QPA_FONTDIR"] = "C:/path/to/fonts"
+
 if not os.path.exists(os.environ["XDG_RUNTIME_DIR"]):
     os.makedirs(os.environ["XDG_RUNTIME_DIR"])
 socketserver.TCPServer.allow_reuse_address = True
@@ -32,7 +37,6 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 class WebBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
-        # Threading synchronization for streaming
         self.image_lock = threading.Lock()
         self.image_condition = threading.Condition(self.image_lock)
         self.latest_image = None
@@ -42,12 +46,10 @@ class WebBrowser(QMainWindow):
         self.setWindowTitle("Python Web Browser")
         self.setGeometry(100, 100, 1024, 768)
 
-        # Create server directory
         self.server_dir = os.path.join(os.getcwd(), "server_files")
         if not os.path.exists(self.server_dir):
             os.makedirs(self.server_dir)
 
-        # Write static index.html
         self.write_static_html()
 
         self.command_queue = queue.Queue()
@@ -57,14 +59,12 @@ class WebBrowser(QMainWindow):
 
         self.server_port = 8000
 
-        # Setup streaming
         self.stream_enabled = True
         self.stream_interval = 25  # 25fps
         self.stream_timer = QTimer(self)
         self.stream_timer.timeout.connect(self.update_stream)
         self.stream_timer.start(self.stream_interval)
 
-        # Setup tabs
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
@@ -78,73 +78,72 @@ class WebBrowser(QMainWindow):
         self.add_new_tab()
         self.setCentralWidget(self.tabs)
 
-        # Start HTTP server
         self.start_http_server()
 
-        self.show()
+        # In headless mode, we don't call self.show()
 
     def write_static_html(self):
         html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; text-align: center; }
-            h1 { color: #333; padding: 20px; margin: 0; background-color: #e0e0e0; }
-            .control-panel { margin: 20px auto; text-align: center; }
-            .scroll-buttons { margin-top: 10px; }
-            .browser-view { margin: 20px auto; max-width: 95%; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-            .browser-view img { width: 100%; border: 1px solid #ddd; }
-        </style>
-        <script>
-            function handleClick(event) {
-                const img = document.getElementById('stream-image');
-                const rect = img.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-                const scaleX = img.naturalWidth / rect.width;
-                const scaleY = img.naturalHeight / rect.height;
-                const actualX = Math.round(x * scaleX);
-                const actualY = Math.round(y * scaleY);
-                fetch(`/click?x=${actualX}&y=${actualY}`);
-            }
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; text-align: center; }
+                h1 { color: #333; padding: 20px; margin: 0; background-color: #e0e0e0; }
+                .control-panel { margin: 20px auto; text-align: center; }
+                .scroll-buttons { margin-top: 10px; }
+                .browser-view { margin: 20px auto; max-width: 95%; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                .browser-view img { width: 100%; border: 1px solid #ddd; }
+            </style>
+            <script>
+                function handleClick(event) {
+                    const img = document.getElementById('stream-image');
+                    const rect = img.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    const scaleX = img.naturalWidth / rect.width;
+                    const scaleY = img.naturalHeight / rect.height;
+                    const actualX = Math.round(x * scaleX);
+                    const actualY = Math.round(y * scaleY);
+                    fetch(`/click?x=${actualX}&y=${actualY}`);
+                }
 
-            function scroll(direction, amount) {
-                fetch(`/scroll?direction=${direction}&amount=${amount}`);
-            }
+                function scroll(direction, amount) {
+                    fetch(`/scroll?direction=${direction}&amount=${amount}`);
+                }
 
-            document.addEventListener('keydown', function(event) {
-                event.preventDefault();
-                const key = event.key;
-                const modifiers = {
-                    ctrl: event.ctrlKey,
-                    shift: event.shiftKey,
-                    alt: event.altKey
-                };
-                fetch(`/type?key=${encodeURIComponent(key)}&modifiers=${encodeURIComponent(JSON.stringify(modifiers))}`);
-            });
+                document.addEventListener('keydown', function(event) {
+                    event.preventDefault();
+                    const key = event.key;
+                    const modifiers = {
+                        ctrl: event.ctrlKey,
+                        shift: event.shiftKey,
+                        alt: event.altKey
+                    };
+                    fetch(`/type?key=${encodeURIComponent(key)}&modifiers=${encodeURIComponent(JSON.stringify(modifiers))}`);
+                });
 
-            document.addEventListener('wheel', function(event) {
-                event.preventDefault();
-                const direction = event.deltaY > 0 ? 'down' : 'up';
-                const amount = Math.abs(event.deltaY);
-                scroll(direction, amount);
-            });
+                document.addEventListener('wheel', function(event) {
+                    event.preventDefault();
+                    const direction = event.deltaY > 0 ? 'down' : 'up';
+                    const amount = Math.abs(event.deltaY);
+                    scroll(direction, amount);
+                });
 
-            document.addEventListener('DOMContentLoaded', function() {
-                const img = document.getElementById('stream-image');
-                img.addEventListener('click', handleClick);
-            });
-        </script>
-    </head>
-    <body>
-        <div class="control-panel">
-            <form action="/navigate" method="get">
-                <input type="text" name="url" placeholder="Enter URL" style="width: 300px;">
-                <button type="submit">Go</button>
-            </form>
-            <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
-            <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const img = document.getElementById('stream-image');
+                    img.addEventListener('click', handleClick);
+                });
+            </script>
+        </head>
+        <body>
+            <div class="control-panel">
+                <form action="/navigate" method="get">
+                    <input type="text" name="url" placeholder="Enter URL" style="width: 300px;">
+                    <button type="submit">Go</button>
+                </form>
+                <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
+                <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
             </div>
             <div class="browser-view">
                 <img id="stream-image" src="/stream" alt="Browser Stream View">
@@ -206,8 +205,6 @@ class WebBrowser(QMainWindow):
         browser.page().loadProgress.connect(self.update_loading_progress)
         browser.page().loadFinished.connect(self.update_url)
         browser.page().titleChanged.connect(self.update_title)
-        # Enable console logging
-        browser.page().javaScriptConsoleMessage = lambda level, msg, line, source: print(f"JS Console [{level}]: {msg} (line {line}, {source})")
 
         layout = QVBoxLayout()
         layout.addWidget(browser)
@@ -237,28 +234,14 @@ class WebBrowser(QMainWindow):
         return layout.itemAt(0).widget()
 
     def navigate_to_url(self):
-        url = self.url_bar.text().strip()
-        if not url:
-            return
-        # Ensure the URL starts with a protocol, defaulting to HTTPS for Google
-        if not url.startswith(('http://', 'https://')):
-            if 'google' in url.lower() or 'accounts' in url.lower():
-                url = f"https://{url}"
-            else:
-                url = f"http://{url}"
+        url = self.url_bar.text()
         self.load_url(url)
 
     def load_url(self, url):
-        try:
-            # Validate URL format
-            parsed_url = QUrl(url)
-            if not parsed_url.isValid():
-                print(f"Invalid URL: {url}")
-                return
-            current_browser = self.get_current_browser()
-            current_browser.load(parsed_url)
-        except Exception as e:
-            print(f"Error loading URL {url}: {e}")
+        if not url.startswith(("http://", "https://")):
+            url = "http://" + url
+        current_browser = self.get_current_browser()
+        current_browser.load(QUrl(url))
 
     def navigate_back(self):
         current_browser = self.get_current_browser()
@@ -322,7 +305,7 @@ class WebBrowser(QMainWindow):
                 super().__init__(*args, **kwargs)
 
             def log_message(self, format, *args):
-               pass  # Suppress server logs
+                pass  # Suppress server logs
 
             def do_GET(self):
                 if self.path == '/stream':
@@ -353,11 +336,7 @@ class WebBrowser(QMainWindow):
                     query = self.path.split('?')[1]
                     params = urllib.parse.parse_qs(query)
                     direction = params.get('direction', [''])[0]
-                    amount_str = params.get('amount', ['100'])[0]
-                    try:
-                       amount = float(amount_str)
-                    except ValueError:
-                        amount = 100.0
+                    amount = int(params.get('amount', [100])[0])
                     self.browser.command_queue.put(('scroll', direction, amount))
                     self.send_response(200)
                     self.end_headers()
@@ -380,7 +359,6 @@ class WebBrowser(QMainWindow):
                 else:
                     super().do_GET()
 
-        # Create a factory function to pass the browser and directory to the handler
         def handler_factory(*args, **kwargs):
             kwargs['browser'] = self
             kwargs['directory'] = self.server_dir
@@ -391,56 +369,47 @@ class WebBrowser(QMainWindow):
         server_thread.daemon = True
         server_thread.start()
         print(f"Browser stream server running at http://localhost:{self.server_port}")
-        time.sleep(0.5)  # Give the server a moment to start
+        time.sleep(0.5)
 
     def handle_click(self, x, y):
         current_browser = self.get_current_browser()
         if not current_browser or not current_browser.page():
             print("Error: No valid browser or page found.")
             return
-
-        # JavaScript to log the element and simulate a full click sequence
         js_code = f"""
             (function() {{
                 var element = document.elementFromPoint({x}, {y});
-                if (!element) {{
-                    console.log('No element found at ({x}, {y})');
-                    return;
+                if (element) {{
+                    var mousedownEvent = new MouseEvent('mousedown', {{
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: {x},
+                        clientY: {y}
+                    }});
+                    element.dispatchEvent(mousedownEvent);
+
+                    var mouseupEvent = new MouseEvent('mouseup', {{
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: {x},
+                        clientY: {y}
+                    }});
+                    element.dispatchEvent(mouseupEvent);
+
+                    var clickEvent = new MouseEvent('click', {{
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                            clientX: {x},
+                        clientY: {y}
+                    }});
+                    element.dispatchEvent(clickEvent);
                 }}
-                console.log('Element at ({x}, {y}):', element.tagName, element.id, element.className);
-
-                // Simulate a full click sequence: mousedown, mouseup, click
-                var events = [
-                    new MouseEvent('mousedown', {{
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        clientX: {x},
-                        clientY: {y}
-                    }}),
-                    new MouseEvent('mouseup', {{
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        clientX: {x},
-                        clientY: {y}
-                    }}),
-                    new MouseEvent('click', {{
-                            bubbles: true,
-                            cancelable: true,
-                            view: window,
-                        clientX: {x},
-                        clientY: {y}
-                    }})
-                ];
-
-                events.forEach(function(event) {{
-                    element.dispatchEvent(event);
-                }});
             }})();
         """
-        current_browser.page().runJavaScript(js_code, lambda result: print(f"Click executed at ({x}, {y})"))
-
+        current_browser.page().runJavaScript(js_code)
 
     def process_commands(self):
         try:
@@ -464,6 +433,7 @@ class WebBrowser(QMainWindow):
             current_browser.page().runJavaScript(f"window.scrollBy(0, -{amount});")
         elif direction == 'down':
             current_browser.page().runJavaScript(f"window.scrollBy(0, {amount});")
+
     def handle_key_press(self, key, modifiers):
         current_browser = self.get_current_browser()
         key_escaped = key.replace("'", "\\'")
@@ -544,12 +514,10 @@ class WebBrowser(QMainWindow):
         """
         current_browser.page().runJavaScript(js_code)
 
-
 if __name__ == "__main__":
+    # Ensure OpenGL context sharing is disabled for offscreen mode
+    QApplication.setAttribute(Qt.AA_DisableShaderDiskCache, True)
     app = QApplication(sys.argv)
     browser = WebBrowser()
     print(f"Browser stream server running at http://localhost:{browser.server_port}")
     sys.exit(app.exec_())
-
-#xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/r.py
-

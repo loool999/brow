@@ -7,31 +7,34 @@ import socketserver
 import queue
 import urllib.parse
 import json
-from PyQt5.QtWebEngineWidgets import QWebEngineProfile
-from PyQt5.QtWebEngineCore import QWebEngineHttpRequest 
-#QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer
+import OpenGL
+
+# Add these imports and configurations at the top of the script
+import ctypes
+ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+
+from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer, QLibraryInfo
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar, 
                              QLineEdit, QPushButton, QAction, QVBoxLayout, 
                              QWidget, QTabWidget, QStatusBar)
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtGui import QKeySequence, QPixmap, QImage
-QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-import socketserver
-import os
-os.environ["QT_QPA_PLATFORM"] = "offscreen"  # For headless environments
-import getpass
-os.environ["XDG_RUNTIME_DIR"] = f"/tmp/runtime-{getpass.getuser()}"
-if not os.path.exists(os.environ["XDG_RUNTIME_DIR"]):
-    os.makedirs(os.environ["XDG_RUNTIME_DIR"])
-socketserver.TCPServer.allow_reuse_address = True
+from PyQt5.QtOpenGL import QGLContext
 
-class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    pass
+# Add font path
+font_path = os.path.join(sys.prefix, 'Lib', 'site-packages', 'PyQt5', 'Qt5', 'lib', 'fonts')
+if os.path.exists(font_path):
+    os.environ['QT_FONT_PATH'] = font_path
+
+# Update OpenGL configuration
+QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+QApplication.setAttribute(Qt.AA_UseOpenGLES)
 
 class WebBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Rest of the code remains the same as in the original script
+        
         # Threading synchronization for streaming
         self.image_lock = threading.Lock()
         self.image_condition = threading.Condition(self.image_lock)
@@ -544,12 +547,23 @@ class WebBrowser(QMainWindow):
         """
         current_browser.page().runJavaScript(js_code)
 
-
 if __name__ == "__main__":
+    # Set the OpenGL implementation
+    import OpenGL
+    OpenGL.GLX.FORCE_DIRECT_RENDERING = True
+
+    # Additional DPI awareness
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except:
+        pass
+
     app = QApplication(sys.argv)
+    
+    # Configure WebEngine
+    profile = QWebEngineProfile.defaultProfile()
+    profile.clearAllVisitedLinks()
+    
     browser = WebBrowser()
     print(f"Browser stream server running at http://localhost:{browser.server_port}")
     sys.exit(app.exec_())
-
-#xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/r.py
-
