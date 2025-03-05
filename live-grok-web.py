@@ -7,19 +7,15 @@ import socketserver
 import queue
 import urllib.parse
 import json
-<<<<<<< HEAD
 from PyQt5.QtWebEngineWidgets import QWebEngineProfile
 from PyQt5.QtWebEngineCore import QWebEngineHttpRequest 
 #QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-=======
->>>>>>> 6ccef2f3be5e7970545ef44a7578d4c4f240eef0
 from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar, 
                              QLineEdit, QPushButton, QAction, QVBoxLayout, 
                              QWidget, QTabWidget, QStatusBar)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QKeySequence, QPixmap, QImage
-<<<<<<< HEAD
 QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
 import socketserver
 import os
@@ -29,8 +25,6 @@ os.environ["XDG_RUNTIME_DIR"] = f"/tmp/runtime-{getpass.getuser()}"
 if not os.path.exists(os.environ["XDG_RUNTIME_DIR"]):
     os.makedirs(os.environ["XDG_RUNTIME_DIR"])
 socketserver.TCPServer.allow_reuse_address = True
-=======
->>>>>>> 6ccef2f3be5e7970545ef44a7578d4c4f240eef0
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
