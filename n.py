@@ -30,6 +30,9 @@ if os.path.exists(font_path):
 QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
 QApplication.setAttribute(Qt.AA_UseOpenGLES)
 
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    pass
+
 class WebBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
