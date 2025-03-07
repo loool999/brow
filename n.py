@@ -7,24 +7,28 @@ import socketserver
 import queue
 import urllib.parse
 import json
-from PyQt5.QtWebEngineWidgets import QWebEngineProfile
-from PyQt5.QtWebEngineCore import QWebEngineHttpRequest 
-#QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer
+import OpenGL
+
+# Add these imports and configurations at the top of the script
+import ctypes
+ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+
+from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer, QLibraryInfo
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar, 
                              QLineEdit, QPushButton, QAction, QVBoxLayout, 
                              QWidget, QTabWidget, QStatusBar)
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtGui import QKeySequence, QPixmap, QImage
+from PyQt5.QtOpenGL import QGLContext
+
+# Add font path
+font_path = os.path.join(sys.prefix, 'Lib', 'site-packages', 'PyQt5', 'Qt5', 'lib', 'fonts')
+if os.path.exists(font_path):
+    os.environ['QT_FONT_PATH'] = font_path
+
+# Update OpenGL configuration
 QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-import socketserver
-import os
-os.environ["QT_QPA_PLATFORM"] = "offscreen"  # For headless environments
-import getpass
-os.environ["XDG_RUNTIME_DIR"] = f"/tmp/runtime-{getpass.getuser()}"
-if not os.path.exists(os.environ["XDG_RUNTIME_DIR"]):
-    os.makedirs(os.environ["XDG_RUNTIME_DIR"])
-socketserver.TCPServer.allow_reuse_address = True
+QApplication.setAttribute(Qt.AA_UseOpenGLES)
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
@@ -32,6 +36,8 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 class WebBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Rest of the code remains the same as in the original script
+        
         # Threading synchronization for streaming
         self.image_lock = threading.Lock()
         self.image_condition = threading.Condition(self.image_lock)
@@ -206,6 +212,8 @@ class WebBrowser(QMainWindow):
         browser.page().loadProgress.connect(self.update_loading_progress)
         browser.page().loadFinished.connect(self.update_url)
         browser.page().titleChanged.connect(self.update_title)
+        # Enable console logging
+        browser.page().javaScriptConsoleMessage = lambda level, msg, line, source: print(f"JS Console [{level}]: {msg} (line {line}, {source})")
 
         layout = QVBoxLayout()
         layout.addWidget(browser)
@@ -235,14 +243,28 @@ class WebBrowser(QMainWindow):
         return layout.itemAt(0).widget()
 
     def navigate_to_url(self):
-        url = self.url_bar.text()
+        url = self.url_bar.text().strip()
+        if not url:
+            return
+        # Ensure the URL starts with a protocol, defaulting to HTTPS for Google
+        if not url.startswith(('http://', 'https://')):
+            if 'google' in url.lower() or 'accounts' in url.lower():
+                url = f"https://{url}"
+            else:
+                url = f"http://{url}"
         self.load_url(url)
 
     def load_url(self, url):
-        if not url.startswith(("http://", "https://")):
-            url = "http://" + url
-        current_browser = self.get_current_browser()
-        current_browser.load(QUrl(url))
+        try:
+            # Validate URL format
+            parsed_url = QUrl(url)
+            if not parsed_url.isValid():
+                print(f"Invalid URL: {url}")
+                return
+            current_browser = self.get_current_browser()
+            current_browser.load(parsed_url)
+        except Exception as e:
+            print(f"Error loading URL {url}: {e}")
 
     def navigate_back(self):
         current_browser = self.get_current_browser()
@@ -306,7 +328,7 @@ class WebBrowser(QMainWindow):
                 super().__init__(*args, **kwargs)
 
             def log_message(self, format, *args):
-                pass  # Suppress server logs
+               pass  # Suppress server logs
 
             def do_GET(self):
                 if self.path == '/stream':
@@ -337,7 +359,11 @@ class WebBrowser(QMainWindow):
                     query = self.path.split('?')[1]
                     params = urllib.parse.parse_qs(query)
                     direction = params.get('direction', [''])[0]
-                    amount = int(params.get('amount', [100])[0])
+                    amount_str = params.get('amount', ['100'])[0]
+                    try:
+                       amount = float(amount_str)
+                    except ValueError:
+                        amount = 100.0
                     self.browser.command_queue.put(('scroll', direction, amount))
                     self.send_response(200)
                     self.end_headers()
@@ -370,41 +396,56 @@ class WebBrowser(QMainWindow):
         server_thread = threading.Thread(target=self.server.serve_forever)
         server_thread.daemon = True
         server_thread.start()
-
-        def run_server():
-            with ThreadedTCPServer(("0.0.0.0", self.server_port), BrowserHandler) as httpd:
-                httpd.command_queue = self.command_queue
-                print(f"Browser stream server running at http://0.0.0.0:{self.server_port}")
-                httpd.serve_forever()
-
-        server_thread = threading.Thread(target=run_server, daemon=True)
-        server_thread.start()
-        time.sleep(0.5)
+        print(f"Browser stream server running at http://localhost:{self.server_port}")
+        time.sleep(0.5)  # Give the server a moment to start
 
     def handle_click(self, x, y):
         current_browser = self.get_current_browser()
-
         if not current_browser or not current_browser.page():
             print("Error: No valid browser or page found.")
             return
-    
+
+        # JavaScript to log the element and simulate a full click sequence
         js_code = f"""
             (function() {{
                 var element = document.elementFromPoint({x}, {y});
-                if (element) {{
-                    var clickEvent = new MouseEvent('click', {{
+                if (!element) {{
+                    console.log('No element found at ({x}, {y})');
+                    return;
+                }}
+                console.log('Element at ({x}, {y}):', element.tagName, element.id, element.className);
+
+                // Simulate a full click sequence: mousedown, mouseup, click
+                var events = [
+                    new MouseEvent('mousedown', {{
                         bubbles: true,
                         cancelable: true,
                         view: window,
                         clientX: {x},
                         clientY: {y}
-                    }});
-                    element.dispatchEvent(clickEvent);
-                }}
+                    }}),
+                    new MouseEvent('mouseup', {{
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        clientX: {x},
+                        clientY: {y}
+                    }}),
+                    new MouseEvent('click', {{
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                        clientX: {x},
+                        clientY: {y}
+                    }})
+                ];
+
+                events.forEach(function(event) {{
+                    element.dispatchEvent(event);
+                }});
             }})();
         """
-
-        current_browser.page().runJavaScript(js_code)
+        current_browser.page().runJavaScript(js_code, lambda result: print(f"Click executed at ({x}, {y})"))
 
 
     def process_commands(self):
@@ -509,11 +550,23 @@ class WebBrowser(QMainWindow):
         """
         current_browser.page().runJavaScript(js_code)
 
-
 if __name__ == "__main__":
+    # Set the OpenGL implementation
+    import OpenGL
+    OpenGL.GLX.FORCE_DIRECT_RENDERING = True
+
+    # Additional DPI awareness
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except:
+        pass
+
     app = QApplication(sys.argv)
+    
+    # Configure WebEngine
+    profile = QWebEngineProfile.defaultProfile()
+    profile.clearAllVisitedLinks()
+    
     browser = WebBrowser()
     print(f"Browser stream server running at http://localhost:{browser.server_port}")
     sys.exit(app.exec_())
-
-#xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/live-grok-web.py
