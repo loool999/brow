@@ -504,4 +504,4 @@ if __name__ == "__main__":
     print(f"Browser stream server running at http://localhost:{browser.server_port}")
     sys.exit(app.exec_())
 
-#e
+#xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/live-grok-web.py

@@ -11,7 +11,7 @@ import getpass
 from PyQt5.QtCore import QUrl, Qt, QTimer, QBuffer
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar, 
                              QLineEdit, QPushButton, QAction, QVBoxLayout, 
-                             QWidget, QTabWidget, QStatusBar)
+                             QWidget, QTabWidget, QStatusBar, QScrollArea)
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtWebEngineCore import QWebEngineHttpRequest
 from PyQt5.QtGui import QKeySequence, QPixmap, QImage
@@ -27,6 +27,21 @@ socketserver.TCPServer.allow_reuse_address = True
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
+
+class ScrollableWebView(QWebEngineView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.StrongFocus)
+        # Enable wheel events to trigger scrolling
+        self.setAttribute(Qt.WA_AcceptTouchEvents)
+
+    def wheelEvent(self, event):
+        # Handle mouse wheel events for scrolling
+        delta = event.angleDelta().y()
+        direction = 'up' if delta > 0 else 'down'
+        amount = abs(delta)
+        self.page().runJavaScript(f"window.scrollBy(0, {-amount if direction == 'up' else amount});")
+        event.accept()
 
 class WebBrowser(QMainWindow):
     def __init__(self):
@@ -127,6 +142,30 @@ class WebBrowser(QMainWindow):
                 document.addEventListener('DOMContentLoaded', function() {
                     const img = document.getElementById('stream-image');
                     img.addEventListener('click', handleClick);
+                    
+                    // Add scroll buttons
+                    const scrollButtonsDiv = document.createElement('div');
+                    scrollButtonsDiv.className = 'scroll-buttons';
+                    
+                    const scrollUpButton = document.createElement('button');
+                    scrollUpButton.innerText = 'Scroll Up';
+                    scrollUpButton.onclick = function() { scroll('up', 100); };
+                    scrollButtonsDiv.appendChild(scrollUpButton);
+                    
+                    const scrollDownButton = document.createElement('button');
+                    scrollDownButton.innerText = 'Scroll Down';
+                    scrollDownButton.onclick = function() { scroll('down', 100); };
+                    scrollButtonsDiv.appendChild(scrollDownButton);
+                    
+                    const controlPanel = document.querySelector('.control-panel');
+                    controlPanel.appendChild(scrollButtonsDiv);
+                    
+                    // Add keyboard shortcut info
+                    const keyboardInfo = document.createElement('div');
+                    keyboardInfo.style.marginTop = '10px';
+                    keyboardInfo.style.fontSize = '12px';
+                    keyboardInfo.innerHTML = 'Keyboard: <b>↑↓</b> to scroll, <b>PageUp/PageDown</b> for larger jumps';
+                    controlPanel.appendChild(keyboardInfo);
                 });
             </script>
         </head>
@@ -174,6 +213,23 @@ class WebBrowser(QMainWindow):
         self.toggle_stream_action.triggered.connect(self.toggle_stream)
         self.toggle_stream_action.setCheckable(True)
         self.toggle_stream_action.setChecked(True)
+        
+        # Add scroll actions with keyboard shortcuts
+        self.scroll_up_action = QAction("Scroll Up", self)
+        self.scroll_up_action.setShortcut(QKeySequence(Qt.Key_Up))
+        self.scroll_up_action.triggered.connect(lambda: self.handle_scroll("up", 100))
+        
+        self.scroll_down_action = QAction("Scroll Down", self)
+        self.scroll_down_action.setShortcut(QKeySequence(Qt.Key_Down))
+        self.scroll_down_action.triggered.connect(lambda: self.handle_scroll("down", 100))
+        
+        self.page_up_action = QAction("Page Up", self)
+        self.page_up_action.setShortcut(QKeySequence(Qt.Key_PageUp))
+        self.page_up_action.triggered.connect(lambda: self.handle_scroll("up", 500))
+        
+        self.page_down_action = QAction("Page Down", self)
+        self.page_down_action.setShortcut(QKeySequence(Qt.Key_PageDown))
+        self.page_down_action.triggered.connect(lambda: self.handle_scroll("down", 500))
 
     def create_toolbar(self):
         navigation_bar = QToolBar("Navigation")
@@ -193,15 +249,35 @@ class WebBrowser(QMainWindow):
         go_button = QPushButton("Go")
         go_button.clicked.connect(self.navigate_to_url)
         navigation_bar.addWidget(go_button)
+        
+        # Add scroll buttons to toolbar
+        scroll_bar = QToolBar("Scrolling")
+        self.addToolBar(scroll_bar)
+        
+        scroll_up_button = QPushButton("Scroll Up")
+        scroll_up_button.clicked.connect(lambda: self.handle_scroll("up", 100))
+        scroll_bar.addWidget(scroll_up_button)
+        
+        scroll_down_button = QPushButton("Scroll Down")
+        scroll_down_button.clicked.connect(lambda: self.handle_scroll("down", 100))
+        scroll_bar.addWidget(scroll_down_button)
 
     def add_new_tab(self, url=None):
-        browser = QWebEngineView()
+        # Use our custom ScrollableWebView instead of the standard QWebEngineView
+        browser = ScrollableWebView()
         browser.page().loadProgress.connect(self.update_loading_progress)
         browser.page().loadFinished.connect(self.update_url)
         browser.page().titleChanged.connect(self.update_title)
+        
+        # Create a scroll area to contain the browser
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(browser)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         layout = QVBoxLayout()
-        layout.addWidget(browser)
+        layout.addWidget(scroll_area)
         layout.setContentsMargins(0, 0, 0, 0)
 
         tab = QWidget()
@@ -224,7 +300,14 @@ class WebBrowser(QMainWindow):
 
     def get_current_browser(self):
         current_tab = self.tabs.currentWidget()
+        if not current_tab:
+            return None
         layout = current_tab.layout()
+        if not layout or layout.count() == 0:
+            return None
+        scroll_area = layout.itemAt(0).widget()
+        if isinstance(scroll_area, QScrollArea):
+            return scroll_area.widget()
         return layout.itemAt(0).widget()
 
     def navigate_to_url(self):
@@ -235,27 +318,33 @@ class WebBrowser(QMainWindow):
         if not url.startswith(("http://", "https://")):
             url = "http://" + url
         current_browser = self.get_current_browser()
-        current_browser.load(QUrl(url))
+        if current_browser:
+            current_browser.load(QUrl(url))
 
     def navigate_back(self):
         current_browser = self.get_current_browser()
-        current_browser.back()
+        if current_browser:
+            current_browser.back()
 
     def navigate_forward(self):
         current_browser = self.get_current_browser()
-        current_browser.forward()
+        if current_browser:
+            current_browser.forward()
 
     def reload_page(self):
         current_browser = self.get_current_browser()
-        current_browser.reload()
+        if current_browser:
+            current_browser.reload()
 
     def navigate_home(self):
         current_browser = self.get_current_browser()
-        current_browser.load(QUrl("https://www.google.com"))
+        if current_browser:
+            current_browser.load(QUrl("https://www.google.com"))
 
     def update_url(self):
         current_browser = self.get_current_browser()
-        self.url_bar.setText(current_browser.url().toString())
+        if current_browser:
+            self.url_bar.setText(current_browser.url().toString())
 
     def update_title(self, title):
         index = self.tabs.currentIndex()
@@ -271,6 +360,8 @@ class WebBrowser(QMainWindow):
         if not self.stream_enabled:
             return
         current_tab = self.tabs.currentWidget()
+        if not current_tab:
+            return
         pixmap = current_tab.grab()
         image = QImage(pixmap.toImage())
         buffer = QBuffer()
@@ -350,6 +441,14 @@ class WebBrowser(QMainWindow):
                     self.browser.command_queue.put(('click', x, y))
                     self.send_response(200)
                     self.end_headers()
+                elif self.path.startswith('/switch_tab?'):
+                    query = self.path.split('?')[1]
+                    params = urllib.parse.parse_qs(query)
+                    direction = params.get('direction', ['next'])[0]
+                    self.browser.command_queue.put(('switch_tab', direction))
+                    self.send_response(303)
+                    self.send_header('Location', '/')
+                    self.end_headers()
                 else:
                     super().do_GET()
 
@@ -417,24 +516,82 @@ class WebBrowser(QMainWindow):
                     self.handle_key_press(command[1], command[2])
                 elif command[0] == 'click':
                     self.handle_click(command[1], command[2])
+                elif command[0] == 'switch_tab':
+                    self.switch_tab(command[1])
                 self.command_queue.task_done()
         except queue.Empty:
             pass
 
     def handle_scroll(self, direction, amount):
         current_browser = self.get_current_browser()
+        if not current_browser:
+            return
+            
+        # Find parent scroll area if it exists
+        current_tab = self.tabs.currentWidget()
+        if current_tab:
+            layout = current_tab.layout()
+            if layout and layout.count() > 0:
+                scroll_area = layout.itemAt(0).widget()
+                if isinstance(scroll_area, QScrollArea):
+                    # Handle scrolling with QScrollArea
+                    scrollbar = scroll_area.verticalScrollBar()
+                    current_pos = scrollbar.value()
+                    if direction == 'up':
+                        scrollbar.setValue(current_pos - amount)
+                    elif direction == 'down':
+                        scrollbar.setValue(current_pos + amount)
+        
+        # Also run JavaScript to handle scrolling within the webpage
         if direction == 'up':
             current_browser.page().runJavaScript(f"window.scrollBy(0, -{amount});")
         elif direction == 'down':
             current_browser.page().runJavaScript(f"window.scrollBy(0, {amount});")
+        
+        # Log scrolling for debugging
+        self.status_bar.showMessage(f"Scrolling {direction} by {amount}px", 1000)
+
+    def switch_tab(self, direction):
+        current_index = self.tabs.currentIndex()
+        tab_count = self.tabs.count()
+        
+        if direction == 'next':
+            new_index = (current_index + 1) % tab_count
+        else:  # prev
+            new_index = (current_index - 1) % tab_count
+            
+        self.tabs.setCurrentIndex(new_index)
 
     def handle_key_press(self, key, modifiers):
         current_browser = self.get_current_browser()
+        if not current_browser:
+            return
+            
+        # Handle special keys for scrolling
+        if key == 'ArrowUp':
+            self.handle_scroll('up', 50)
+            return
+        elif key == 'ArrowDown':
+            self.handle_scroll('down', 50)
+            return
+        elif key == 'PageUp':
+            self.handle_scroll('up', 300)
+            return
+        elif key == 'PageDown':
+            self.handle_scroll('down', 300)
+            return
+        elif key == 'Home':
+            current_browser.page().runJavaScript("window.scrollTo(0, 0);")
+            return
+        elif key == 'End':
+            current_browser.page().runJavaScript("window.scrollTo(0, document.body.scrollHeight);")
+            return
+        
         key_escaped = key.replace("'", "\\'")
-        shift = 'true' if key == 'Shift' else 'false'
-        ctrl = 'true' if key == 'Control' else 'false'
-        alt = 'true' if key == 'Alt' else 'false'
-        meta = 'true' if key == 'Meta' else 'false'
+        shift = 'true' if modifiers.get('shift', False) else 'false'
+        ctrl = 'true' if modifiers.get('ctrl', False) else 'false'
+        alt = 'true' if modifiers.get('alt', False) else 'false'
+        meta = 'false'  # We don't handle Meta key
 
         js_code = f"""
         (function() {{
@@ -508,17 +665,11 @@ class WebBrowser(QMainWindow):
         """
         current_browser.page().runJavaScript(js_code)
 
-"""if __name__ == "__main__":
+if __name__ == "__main__":
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     browser = WebBrowser()
     print(f"Browser stream server running at http://localhost:{browser.server_port}")
-    sys.exit(app.exec_())"""
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    browser = WebBrowser()
-    # In headless mode, no need to call show()
     sys.exit(app.exec_())
-
-#xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/r.py
+    
+#chmod 0700 /tmp/runtime-codespace && xvfb-run /home/codespace/.python/current/bin/python /workspaces/brow/r.py

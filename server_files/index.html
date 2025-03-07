@@ -11,9 +11,6 @@
                 .browser-view img { width: 100%; border: 1px solid #ddd; }
             </style>
             <script>
-                let isDragging = false;
-                let lastX, lastY;
-
                 function handleClick(event) {
                     const img = document.getElementById('stream-image');
                     const rect = img.getBoundingClientRect();
@@ -24,40 +21,6 @@
                     const actualX = Math.round(x * scaleX);
                     const actualY = Math.round(y * scaleY);
                     fetch(`/click?x=${actualX}&y=${actualY}`);
-                }
-
-                function handleMouseDown(event) {
-                    isDragging = true;
-                    const img = document.getElementById('stream-image');
-                    const rect = img.getBoundingClientRect();
-                    lastX = event.clientX - rect.left;
-                    lastY = event.clientY - rect.top;
-                }
-
-                function handleMouseMove(event) {
-                    if (isDragging) {
-                        const img = document.getElementById('stream-image');
-                        const rect = img.getBoundingClientRect();
-                        const scaleX = img.naturalWidth / rect.width;
-                        const scaleY = img.naturalHeight / rect.height;
-                        const x = event.clientX - rect.left;
-                        const y = event.clientY - rect.top;
-                        const actualX = Math.round(x * scaleX);
-                        const actualY = Math.round(y * scaleY);
-                        const deltaX = Math.round((x - lastX) * scaleX);
-                        const deltaY = Math.round((y - lastY) * scaleY);
-                        fetch(`/drag?dx=${deltaX}&dy=${deltaY}`);
-                        lastX = x;
-                        lastY = y;
-                    }
-                }
-
-                function handleMouseUp(event) {
-                    isDragging = false;
-                }
-
-                function requestMouseLock() {
-                    fetch('/request_mouse_lock');
                 }
 
                 function scroll(direction, amount) {
@@ -78,16 +41,37 @@
                 document.addEventListener('wheel', function(event) {
                     event.preventDefault();
                     const direction = event.deltaY > 0 ? 'down' : 'up';
-                    const amount = Math.round(Math.abs(event.deltaY));
+                    const amount = Math.abs(event.deltaY);
                     scroll(direction, amount);
                 });
 
                 document.addEventListener('DOMContentLoaded', function() {
                     const img = document.getElementById('stream-image');
                     img.addEventListener('click', handleClick);
-                    img.addEventListener('mousedown', handleMouseDown);
-                    document.addEventListener('mousemove', handleMouseMove);
-                    document.addEventListener('mouseup', handleMouseUp);
+                    
+                    // Add scroll buttons
+                    const scrollButtonsDiv = document.createElement('div');
+                    scrollButtonsDiv.className = 'scroll-buttons';
+                    
+                    const scrollUpButton = document.createElement('button');
+                    scrollUpButton.innerText = 'Scroll Up';
+                    scrollUpButton.onclick = function() { scroll('up', 100); };
+                    scrollButtonsDiv.appendChild(scrollUpButton);
+                    
+                    const scrollDownButton = document.createElement('button');
+                    scrollDownButton.innerText = 'Scroll Down';
+                    scrollDownButton.onclick = function() { scroll('down', 100); };
+                    scrollButtonsDiv.appendChild(scrollDownButton);
+                    
+                    const controlPanel = document.querySelector('.control-panel');
+                    controlPanel.appendChild(scrollButtonsDiv);
+                    
+                    // Add keyboard shortcut info
+                    const keyboardInfo = document.createElement('div');
+                    keyboardInfo.style.marginTop = '10px';
+                    keyboardInfo.style.fontSize = '12px';
+                    keyboardInfo.innerHTML = 'Keyboard: <b>↑↓</b> to scroll, <b>PageUp/PageDown</b> for larger jumps';
+                    controlPanel.appendChild(keyboardInfo);
                 });
             </script>
         </head>
@@ -99,7 +83,6 @@
                 </form>
                 <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
                 <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
-                <button onclick="requestMouseLock()">Request Mouse Lock</button>
             </div>
             <div class="browser-view">
                 <img id="stream-image" src="/stream" alt="Browser Stream View">
