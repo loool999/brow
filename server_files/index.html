@@ -1,5 +1,4 @@
 
-<<<<<<< HEAD
     <!DOCTYPE html>
     <html>
     <head>
@@ -27,72 +26,6 @@
             function scroll(direction, amount) {
                 fetch(`/scroll?direction=${direction}&amount=${amount}`);
             }
-=======
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; text-align: center; }
-                h1 { color: #333; padding: 20px; margin: 0; background-color: #e0e0e0; }
-                .control-panel { margin: 20px auto; text-align: center; }
-                .scroll-buttons { margin-top: 10px; }
-                .browser-view { margin: 20px auto; max-width: 95%; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-                .browser-view img { width: 100%; border: 1px solid #ddd; }
-            </style>
-            <script>
-                let isDragging = false;
-                let lastX, lastY;
-
-                function handleClick(event) {
-                    const img = document.getElementById('stream-image');
-                    const rect = img.getBoundingClientRect();
-                    const x = event.clientX - rect.left;
-                    const y = event.clientY - rect.top;
-                    const scaleX = img.naturalWidth / rect.width;
-                    const scaleY = img.naturalHeight / rect.height;
-                    const actualX = Math.round(x * scaleX);
-                    const actualY = Math.round(y * scaleY);
-                    fetch(`/click?x=${actualX}&y=${actualY}`);
-                }
-
-                function handleMouseDown(event) {
-                    isDragging = true;
-                    const img = document.getElementById('stream-image');
-                    const rect = img.getBoundingClientRect();
-                    lastX = event.clientX - rect.left;
-                    lastY = event.clientY - rect.top;
-                }
-
-                function handleMouseMove(event) {
-                    if (isDragging) {
-                        const img = document.getElementById('stream-image');
-                        const rect = img.getBoundingClientRect();
-                        const scaleX = img.naturalWidth / rect.width;
-                        const scaleY = img.naturalHeight / rect.height;
-                        const x = event.clientX - rect.left;
-                        const y = event.clientY - rect.top;
-                        const actualX = Math.round(x * scaleX);
-                        const actualY = Math.round(y * scaleY);
-                        const deltaX = Math.round((x - lastX) * scaleX);
-                        const deltaY = Math.round((y - lastY) * scaleY);
-                        fetch(`/drag?dx=${deltaX}&dy=${deltaY}`);
-                        lastX = x;
-                        lastY = y;
-                    }
-                }
-
-                function handleMouseUp(event) {
-                    isDragging = false;
-                }
-
-                function requestMouseLock() {
-                    fetch('/request_mouse_lock');
-                }
-
-                function scroll(direction, amount) {
-                    fetch(`/scroll?direction=${direction}&amount=${amount}`);
-                }
->>>>>>> 6ccef2f3be5e7970545ef44a7578d4c4f240eef0
 
             document.addEventListener('keydown', function(event) {
                 event.preventDefault();
@@ -105,7 +38,6 @@
                 fetch(`/type?key=${encodeURIComponent(key)}&modifiers=${encodeURIComponent(JSON.stringify(modifiers))}`);
             });
 
-<<<<<<< HEAD
             document.addEventListener('wheel', function(event) {
                 event.preventDefault();
                 const direction = event.deltaY > 0 ? 'down' : 'up';
@@ -127,33 +59,6 @@
             </form>
             <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
             <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
-=======
-                document.addEventListener('wheel', function(event) {
-                    event.preventDefault();
-                    const direction = event.deltaY > 0 ? 'down' : 'up';
-                    const amount = Math.round(Math.abs(event.deltaY));
-                    scroll(direction, amount);
-                });
-
-                document.addEventListener('DOMContentLoaded', function() {
-                    const img = document.getElementById('stream-image');
-                    img.addEventListener('click', handleClick);
-                    img.addEventListener('mousedown', handleMouseDown);
-                    document.addEventListener('mousemove', handleMouseMove);
-                    document.addEventListener('mouseup', handleMouseUp);
-                });
-            </script>
-        </head>
-        <body>
-            <div class="control-panel">
-                <form action="/navigate" method="get">
-                    <input type="text" name="url" placeholder="Enter URL" style="width: 300px;">
-                    <button type="submit">Go</button>
-                </form>
-                <button onclick="location.href='/switch_tab?direction=prev'">Previous Tab</button>
-                <button onclick="location.href='/switch_tab?direction=next'">Next Tab</button>
-                <button onclick="requestMouseLock()">Request Mouse Lock</button>
->>>>>>> 6ccef2f3be5e7970545ef44a7578d4c4f240eef0
             </div>
             <div class="browser-view">
                 <img id="stream-image" src="/stream" alt="Browser Stream View">

@@ -7,9 +7,6 @@ import socketserver
 import queue
 import urllib.parse
 import json
-import OpenGL
-
-# Add these imports and configurations at the top of the script
 import ctypes
 ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
 
@@ -36,8 +33,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 class WebBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
-        # Rest of the code remains the same as in the original script
-        
+
         # Threading synchronization for streaming
         self.image_lock = threading.Lock()
         self.image_condition = threading.Condition(self.image_lock)
@@ -65,7 +61,7 @@ class WebBrowser(QMainWindow):
 
         # Setup streaming
         self.stream_enabled = True
-        self.stream_interval = 25  # 25fps
+        self.stream_interval = 25  # 25ms
         self.stream_timer = QTimer(self)
         self.stream_timer.timeout.connect(self.update_stream)
         self.stream_timer.start(self.stream_interval)
@@ -304,7 +300,7 @@ class WebBrowser(QMainWindow):
         image = QImage(pixmap.toImage())
         buffer = QBuffer()
         buffer.open(QBuffer.ReadWrite)
-        image.save(buffer, "JPEG", quality=70)
+        image.save(buffer, "JPEG", quality=90)
         image_bytes = bytes(buffer.data())
         with self.image_lock:
             self.latest_image = image_bytes
@@ -551,11 +547,6 @@ class WebBrowser(QMainWindow):
         current_browser.page().runJavaScript(js_code)
 
 if __name__ == "__main__":
-    # Set the OpenGL implementation
-    import OpenGL
-    OpenGL.GLX.FORCE_DIRECT_RENDERING = True
-
-    # Additional DPI awareness
     try:
         ctypes.windll.user32.SetProcessDPIAware()
     except:
